@@ -1,123 +1,82 @@
-import Database from 'better-sqlite3';
+import fs from 'fs';
 import path from 'path';
 
-const DB_PATH = path.join(process.cwd(), 'data', 'copa.db');
+const DATA_DIR = path.join(process.cwd(), 'data');
+const DB_FILE = path.join(DATA_DIR, 'db.json');
 
-let db: Database.Database | null = null;
+interface Corretor {
+  cpf: string;
+  nome: string;
+  nome_comercial: string;
+  posicao: string;
+  equipe: string;
+  diretoria: string;
+  praca: 'sp' | 'campinas';
+}
 
-export function getDb(): Database.Database {
-  if (!db) {
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    initDb(db);
+interface Evento {
+  id: number;
+  external_id: string;
+  corretor_cpf: string;
+  tipo: string;
+  pontos: number;
+  multiplicador: number;
+  empreendimento: string;
+  produto: string;
+  semana: string;
+  data: string;
+  detalhes: string;
+}
+
+interface DB {
+  corretores: Corretor[];
+  eventos: Evento[];
+  vgv: { sp: number; campinas: number };
+  config: { admin_password: string };
+  nextEventId: number;
+}
+
+function ensureDir() {
+  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+function getDefaultDb(): DB {
+  return {
+    corretores: [],
+    eventos: [],
+    vgv: { sp: 0, campinas: 0 },
+    config: { admin_password: 'admin123' },
+    nextEventId: 1,
+  };
+}
+
+export function readDb(): DB {
+  ensureDir();
+  if (!fs.existsSync(DB_FILE)) {
+    const db = getDefaultDb();
+    writeDb(db);
+    return db;
   }
-  return db;
-}
-
-function initDb(db: Database.Database) {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS corretores (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      cpf TEXT UNIQUE,
-      nome TEXT NOT NULL,
-      nome_comercial TEXT,
-      posicao TEXT,
-      equipe TEXT NOT NULL,
-      diretoria TEXT,
-      praca TEXT NOT NULL CHECK(praca IN ('sp', 'campinas')),
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS eventos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      external_id TEXT UNIQUE,
-      corretor_cpf TEXT NOT NULL,
-      tipo TEXT NOT NULL,
-      pontos REAL NOT NULL,
-      multiplicador REAL DEFAULT 1.0,
-      empreendimento TEXT,
-      produto TEXT,
-      semana TEXT,
-      data TEXT,
-      detalhes TEXT,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    CREATE TABLE IF NOT EXISTS vgv (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      praca TEXT NOT NULL UNIQUE,
-      valor_atual REAL NOT NULL DEFAULT 0,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    );
-
-    INSERT OR IGNORE INTO vgv (praca, valor_atual) VALUES ('sp', 0);
-    INSERT OR IGNORE INTO vgv (praca, valor_atual) VALUES ('campinas', 0);
-
-    CREATE TABLE IF NOT EXISTS config (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    );
-
-    INSERT OR IGNORE INTO config (key, value) VALUES ('admin_password', 'admin123');
-
-    CREATE INDEX IF NOT EXISTS idx_eventos_cpf ON eventos(corretor_cpf);
-    CREATE INDEX IF NOT EXISTS idx_eventos_tipo ON eventos(tipo);
-    CREATE INDEX IF NOT EXISTS idx_corretores_praca ON corretores(praca);
-  `);
-}
-
-// Pontuação por empreendimento/SAP (da aba Premissas)
-const PONTUACAO_EMPREENDIMENTO: Record<string, number> = {
-  'ALENZA CAMBUÍ': 250,
-  'ÁRIA HIGIENÓPOLIS': 100,
-  'BEM MOEMA': 100,
-  'BUENO BRANDÃO 257': 250,
-  'ELO': 50, 'ELO 2 CAMINHOS DA LAPA': 50,
-  'ELO DUO CAMINHOS DA LAPA': 100,
-  "D'ORU": 250,
-  'DSG ITAIM': 250,
-  'GRAVURA PERDIZES': 250,
-  'SOMA PERDIZES': 100,
-  'TEG - SACOMÃ': 250, 'TEG SACOMÃ': 250,
-  'TEG MOOCA': 50,
-  'UNIVERSO TATUAPÉ - ESFERA': 50, 'ESFERA': 50,
-  'UNIVERSO TATUAPÉ - ÓRBITA': 100, 'ÓRBITA': 100,
-  'YARD CAMBUÍ': 100,
-  'ZAHLE JARDINS': 250,
-  'YPY ALTO DO IPIRANGA': 250,
-  'LUCE CAMBUÍ': 250,
-  'VISTA HORIZONTE': 50,
-  'AMPÈRE BROOKLIN': 250,
-  'LAZUR MANSÕES': 50, 'LAZUR': 50,
-  'MOZAE HIGIENÓPOLIS': 250,
-  'CAPITOLO BY PIERO LISSONI': 250, 'CAPITOLO': 250,
-  'GARDEN DESIGN': 50, 'GARDEN DESIGN PRIVATE PARK RESIDENCE': 50,
-  'NOVA VIVERE CAMINHOS DA LAPA': 50, 'NOVA VIVERE': 50,
-  'RESERVA': 50,
-  'CHÂTEAU JARDIN': 50, 'CHATEAU JARDIN': 50,
-  'TIÈL': 250, 'TIÈL VILA NOVA CONCEIÇÃO': 250, 'TIEL': 250,
-};
-
-export function getPontuacaoVenda(empreendimento: string): number {
-  if (!empreendimento) return 50;
-  const emp = empreendimento.trim().toUpperCase();
-  // Direct match
-  for (const [key, pts] of Object.entries(PONTUACAO_EMPREENDIMENTO)) {
-    if (emp.includes(key.toUpperCase())) return pts;
+  try {
+    return JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+  } catch {
+    return getDefaultDb();
   }
-  return 50; // default
 }
 
-export function mapPraca(regional: string | undefined): 'sp' | 'campinas' {
-  if (!regional) return 'sp';
-  const r = regional.toLowerCase();
-  if (r.includes('campinas')) return 'campinas';
-  return 'sp';
+export function writeDb(db: DB): void {
+  ensureDir();
+  fs.writeFileSync(DB_FILE, JSON.stringify(db));
 }
 
 export function normalizeCpf(cpf: string | undefined | null): string {
   if (!cpf) return '';
   return cpf.toString().replace(/[^\d]/g, '');
+}
+
+export function mapPraca(regional: string | undefined): 'sp' | 'campinas' {
+  if (!regional) return 'sp';
+  return regional.toLowerCase().includes('campinas') ? 'campinas' : 'sp';
 }
 
 export interface FaseInfo {

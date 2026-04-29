@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { readDb } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -7,37 +7,22 @@ export async function GET(req: NextRequest) {
   const cpf = req.nextUrl.searchParams.get('cpf');
   if (!cpf) return NextResponse.json({ error: 'CPF required' }, { status: 400 });
 
-  const db = getDb();
-
-  const corretor = db.prepare(`
-    SELECT cpf, nome, nome_comercial, posicao, equipe, diretoria, praca
-    FROM corretores WHERE cpf = ?
-  `).get(cpf);
-
+  const db = readDb();
+  const corretor = db.corretores.find(c => c.cpf === cpf);
   if (!corretor) return NextResponse.json({ error: 'Corretor não encontrado' }, { status: 404 });
 
-  const eventos = db.prepare(`
-    SELECT tipo, pontos, multiplicador, empreendimento, semana, data, detalhes
-    FROM eventos WHERE corretor_cpf = ?
-    ORDER BY created_at DESC
-  `).all(cpf);
+  const eventos = db.eventos.filter(e => e.corretor_cpf === cpf);
+  const totalPontos = eventos.reduce((s, e) => s + e.pontos, 0);
 
-  // Summary by tipo
-  const resumo = db.prepare(`
-    SELECT tipo, SUM(pontos) as total, COUNT(*) as quantidade
-    FROM eventos WHERE corretor_cpf = ?
-    GROUP BY tipo
-    ORDER BY total DESC
-  `).all(cpf);
+  // Resumo by tipo
+  const resumoMap = new Map<string, { tipo: string; total: number; quantidade: number }>();
+  for (const e of eventos) {
+    const r = resumoMap.get(e.tipo) || { tipo: e.tipo, total: 0, quantidade: 0 };
+    r.total += e.pontos;
+    r.quantidade++;
+    resumoMap.set(e.tipo, r);
+  }
+  const resumo = Array.from(resumoMap.values()).sort((a, b) => b.total - a.total);
 
-  const totalPontos = db.prepare(`
-    SELECT COALESCE(SUM(pontos), 0) as total FROM eventos WHERE corretor_cpf = ?
-  `).get(cpf) as any;
-
-  return NextResponse.json({
-    corretor,
-    eventos,
-    resumo,
-    totalPontos: totalPontos?.total || 0,
-  });
+  return NextResponse.json({ corretor, eventos: eventos.slice(0, 50), resumo, totalPontos });
 }

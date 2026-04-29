@@ -1,65 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb, getFases } from '@/lib/db';
+import { readDb, getFases } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: NextRequest) {
   const praca = req.nextUrl.searchParams.get('praca') || 'sp';
-  const db = getDb();
+  const db = readDb();
 
-  // Artilheiros: corretores with sum of all their eventos
-  const artilheiros = db.prepare(`
-    SELECT
-      c.cpf,
-      COALESCE(c.nome_comercial, c.nome) as nome,
-      c.equipe as gerente,
-      c.diretoria,
-      COALESCE(SUM(e.pontos), 0) as pontos,
-      COUNT(e.id) as total_eventos
-    FROM corretores c
-    LEFT JOIN eventos e ON e.corretor_cpf = c.cpf
-    WHERE c.praca = ?
-      AND (c.posicao IS NULL OR c.posicao NOT IN ('Gerente de Vendas', 'Diretor de Vendas', 'Superintendente Online'))
-    GROUP BY c.cpf
-    HAVING pontos > 0
-    ORDER BY pontos DESC
-  `).all(praca);
+  // Filter corretores by praca (exclude managers)
+  const corretoresPraca = db.corretores.filter(c =>
+    c.praca === praca &&
+    !['Gerente de Vendas', 'Diretor de Vendas', 'Superintendente Online'].includes(c.posicao)
+  );
 
-  // Seleções: sum by equipe (gerente)
-  const selecoes = db.prepare(`
-    SELECT
-      c.equipe as gerente,
-      c.diretoria,
-      COALESCE(SUM(e.pontos), 0) as pontos,
-      COUNT(DISTINCT c.cpf) as total_corretores
-    FROM corretores c
-    LEFT JOIN eventos e ON e.corretor_cpf = c.cpf
-    WHERE c.praca = ?
-      AND (c.posicao IS NULL OR c.posicao NOT IN ('Gerente de Vendas', 'Diretor de Vendas', 'Superintendente Online'))
-    GROUP BY c.equipe
-    HAVING pontos > 0
-    ORDER BY pontos DESC
-  `).all(praca);
+  // Artilheiros: sum eventos per corretor
+  const artilheiros = corretoresPraca.map(c => {
+    const eventos = db.eventos.filter(e => e.corretor_cpf === c.cpf);
+    const pontos = eventos.reduce((s, e) => s + e.pontos, 0);
+    return {
+      cpf: c.cpf,
+      nome: c.nome_comercial || c.nome,
+      gerente: c.equipe,
+      diretoria: c.diretoria,
+      pontos,
+      total_eventos: eventos.length,
+    };
+  }).filter(a => a.pontos > 0).sort((a, b) => b.pontos - a.pontos);
 
-  // VGV
-  const vgv = db.prepare('SELECT valor_atual FROM vgv WHERE praca = ?').get(praca) as any;
+  // Selecoes: sum by equipe
+  const equipeMap = new Map<string, { gerente: string; diretoria: string; pontos: number; corretores: Set<string> }>();
+  for (const c of corretoresPraca) {
+    if (!equipeMap.has(c.equipe)) {
+      equipeMap.set(c.equipe, { gerente: c.equipe, diretoria: c.diretoria, pontos: 0, corretores: new Set() });
+    }
+    const eq = equipeMap.get(c.equipe)!;
+    eq.corretores.add(c.cpf);
+    const pontos = db.eventos.filter(e => e.corretor_cpf === c.cpf).reduce((s, e) => s + e.pontos, 0);
+    eq.pontos += pontos;
+  }
+  const selecoes = Array.from(equipeMap.values())
+    .filter(s => s.pontos > 0)
+    .map(s => ({ gerente: s.gerente, diretoria: s.diretoria, pontos: s.pontos, total_corretores: s.corretores.size }))
+    .sort((a, b) => b.pontos - a.pontos);
 
-  // Stats
-  const totalCorretores = db.prepare('SELECT COUNT(*) as c FROM corretores WHERE praca = ?').get(praca) as any;
-  const totalEventos = db.prepare(`
-    SELECT COUNT(*) as c FROM eventos e
-    JOIN corretores c ON c.cpf = e.corretor_cpf
-    WHERE c.praca = ?
-  `).get(praca) as any;
+  const vgvAtual = praca === 'sp' ? db.vgv.sp : db.vgv.campinas;
 
   return NextResponse.json({
     artilheiros,
     selecoes,
     fases: getFases(praca),
-    vgvAtual: vgv?.valor_atual || 0,
+    vgvAtual,
     stats: {
-      totalCorretores: totalCorretores?.c || 0,
-      totalEventos: totalEventos?.c || 0,
+      totalCorretores: corretoresPraca.length,
+      totalEventos: db.eventos.filter(e => corretoresPraca.some(c => c.cpf === e.corretor_cpf)).length,
     },
   });
 }
