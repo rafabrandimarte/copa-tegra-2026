@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: copa-tegra-2026
+    runtime: docker
+    repo: https://github.com/rafabrandimarte/copa-tegra-2026
+    branch: main
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: NODE_ENV
+        value: production
+    disk:
+      name: copa-data
+      mountPath: /app/data
+      sizeGB: 1
