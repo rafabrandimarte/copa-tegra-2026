@@ -5,13 +5,12 @@ const RUNTIME_DB = '/tmp/db.json';
 const isProduction = process.env.VERCEL === '1';
 
 function getBundledData(): DB {
+  // Try multiple paths where the data might be
   const candidates = [
     path.join(process.cwd(), 'data', 'db.json'),
     path.join(__dirname, '..', '..', 'data', 'db.json'),
     path.join(__dirname, '..', '..', '..', 'data', 'db.json'),
     path.join(__dirname, '..', '..', '..', '..', 'data', 'db.json'),
-    '/var/task/data/db.json',
-    '/var/task/.next/server/data/db.json',
   ];
   for (const p of candidates) {
     try {
@@ -20,6 +19,10 @@ function getBundledData(): DB {
       }
     } catch {}
   }
+  // Fallback: try require
+  try {
+    return require('../../data/db.json');
+  } catch {}
   return getDefaultDb();
 }
 
