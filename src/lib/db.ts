@@ -1,12 +1,17 @@
 import fs from 'fs';
 import path from 'path';
-import seedData from './seed-data.json';
 
 const RUNTIME_DB = '/tmp/db.json';
 const isProduction = process.env.VERCEL === '1';
 
 function getBundledData(): DB {
-  return seedData as unknown as DB;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const data = require('./seed-data.json');
+    return data as DB;
+  } catch {
+    return getDefaultDb();
+  }
 }
 
 interface Corretor {
