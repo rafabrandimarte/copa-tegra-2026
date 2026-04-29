@@ -1,8 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
-const DB_FILE = path.join(DATA_DIR, 'db.json');
+const BUNDLED_DB = path.join(process.cwd(), 'data', 'db.json');
+const RUNTIME_DB = process.env.NODE_ENV === 'production' ? '/tmp/db.json' : path.join(process.cwd(), 'data', 'db.json');
 
 interface Corretor {
   cpf: string;
@@ -28,7 +28,7 @@ interface Evento {
   detalhes: string;
 }
 
-interface DB {
+export interface DB {
   corretores: Corretor[];
   eventos: Evento[];
   vgv: { sp: number; campinas: number };
@@ -36,37 +36,33 @@ interface DB {
   nextEventId: number;
 }
 
-function ensureDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
 function getDefaultDb(): DB {
-  return {
-    corretores: [],
-    eventos: [],
-    vgv: { sp: 0, campinas: 0 },
-    config: { admin_password: 'admin123' },
-    nextEventId: 1,
-  };
+  return { corretores: [], eventos: [], vgv: { sp: 0, campinas: 0 }, config: { admin_password: 'admin123' }, nextEventId: 1 };
 }
 
 export function readDb(): DB {
-  ensureDir();
-  if (!fs.existsSync(DB_FILE)) {
-    const db = getDefaultDb();
-    writeDb(db);
-    return db;
+  // In production: read from /tmp if exists, otherwise copy bundled data
+  if (process.env.NODE_ENV === 'production') {
+    if (!fs.existsSync(RUNTIME_DB)) {
+      // Copy bundled data to /tmp
+      if (fs.existsSync(BUNDLED_DB)) {
+        fs.copyFileSync(BUNDLED_DB, RUNTIME_DB);
+      } else {
+        fs.writeFileSync(RUNTIME_DB, JSON.stringify(getDefaultDb()));
+      }
+    }
   }
+
+  const dbPath = fs.existsSync(RUNTIME_DB) ? RUNTIME_DB : BUNDLED_DB;
   try {
-    return JSON.parse(fs.readFileSync(DB_FILE, 'utf-8'));
+    return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
   } catch {
     return getDefaultDb();
   }
 }
 
 export function writeDb(db: DB): void {
-  ensureDir();
-  fs.writeFileSync(DB_FILE, JSON.stringify(db));
+  fs.writeFileSync(RUNTIME_DB, JSON.stringify(db));
 }
 
 export function normalizeCpf(cpf: string | undefined | null): string {
