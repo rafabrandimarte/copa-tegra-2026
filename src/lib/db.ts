@@ -1,29 +1,12 @@
 import fs from 'fs';
 import path from 'path';
+import seedData from './seed-data.json';
 
 const RUNTIME_DB = '/tmp/db.json';
 const isProduction = process.env.VERCEL === '1';
 
 function getBundledData(): DB {
-  // Try multiple paths where the data might be
-  const candidates = [
-    path.join(process.cwd(), 'data', 'db.json'),
-    path.join(__dirname, '..', '..', 'data', 'db.json'),
-    path.join(__dirname, '..', '..', '..', 'data', 'db.json'),
-    path.join(__dirname, '..', '..', '..', '..', 'data', 'db.json'),
-  ];
-  for (const p of candidates) {
-    try {
-      if (fs.existsSync(p)) {
-        return JSON.parse(fs.readFileSync(p, 'utf-8'));
-      }
-    } catch {}
-  }
-  // Fallback: try require
-  try {
-    return require('../../data/db.json');
-  } catch {}
-  return getDefaultDb();
+  return seedData as unknown as DB;
 }
 
 interface Corretor {
