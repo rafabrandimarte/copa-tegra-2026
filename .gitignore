@@ -1,0 +1,8 @@
+node_modules/
+.next/
+data/copa.db
+data/copa.db-wal
+data/copa.db-shm
+*.log
+.env
+.env.local

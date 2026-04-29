@@ -1,0 +1,98 @@
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Barlow:wght@300;400;500;600;700&family=Bebas+Neue&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --copa-green: #00A651;
+  --copa-yellow: #FFD700;
+  --copa-blue: #002776;
+  --copa-dark: #0A0E1A;
+  --copa-gold: #C9A44A;
+}
+
+body {
+  font-family: 'Barlow', sans-serif;
+  background: var(--copa-dark);
+  color: white;
+}
+
+/* Stadium field gradient */
+.stadium-bg {
+  background: linear-gradient(135deg, #0A0E1A 0%, #0D2818 30%, #0A0E1A 70%, #1A0A2E 100%);
+  position: relative;
+}
+
+.stadium-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% 120%, rgba(0, 166, 81, 0.15) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 20% 80%, rgba(0, 39, 118, 0.1) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+/* Gold shimmer effect */
+.gold-shimmer {
+  background: linear-gradient(90deg, #C9A44A, #FFD700, #C9A44A);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+@keyframes shimmer {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Ranking row hover */
+.ranking-row {
+  transition: all 0.3s ease;
+}
+.ranking-row:hover {
+  transform: translateX(4px);
+  background: rgba(255, 215, 0, 0.05);
+}
+
+/* Phase progress glow */
+.phase-active {
+  box-shadow: 0 0 15px rgba(0, 166, 81, 0.4), 0 0 30px rgba(0, 166, 81, 0.1);
+}
+.phase-completed {
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.4);
+}
+
+/* Trophy podium */
+.podium-1 { background: linear-gradient(180deg, rgba(255, 215, 0, 0.2) 0%, rgba(255, 215, 0, 0.05) 100%); border: 1px solid rgba(255, 215, 0, 0.3); }
+.podium-2 { background: linear-gradient(180deg, rgba(192, 192, 192, 0.15) 0%, rgba(192, 192, 192, 0.03) 100%); border: 1px solid rgba(192, 192, 192, 0.2); }
+.podium-3 { background: linear-gradient(180deg, rgba(205, 127, 50, 0.15) 0%, rgba(205, 127, 50, 0.03) 100%); border: 1px solid rgba(205, 127, 50, 0.2); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
+::-webkit-scrollbar-thumb { background: rgba(255,215,0,0.2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,215,0,0.4); }
+
+/* Tab active */
+.tab-active {
+  border-bottom: 3px solid var(--copa-yellow);
+  color: var(--copa-yellow);
+}
+
+/* Ball icon pulse */
+@keyframes ball-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.ball-bounce { animation: ball-bounce 1.5s ease-in-out infinite; }
+
+/* Admin panel */
+.admin-card {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  backdrop-filter: blur(10px);
+}
