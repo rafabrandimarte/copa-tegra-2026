@@ -1,12 +1,30 @@
 import fs from 'fs';
 import path from 'path';
 
-// Import the bundled data directly - this ensures it's included in the build
-import bundledData from '../../data/db.json';
-
 const RUNTIME_DB = '/tmp/db.json';
-const LOCAL_DB = path.join(process.cwd(), 'data', 'db.json');
 const isProduction = process.env.VERCEL === '1';
+
+function getBundledData(): DB {
+  // Try multiple paths where the data might be
+  const candidates = [
+    path.join(process.cwd(), 'data', 'db.json'),
+    path.join(__dirname, '..', '..', 'data', 'db.json'),
+    path.join(__dirname, '..', '..', '..', 'data', 'db.json'),
+    path.join(__dirname, '..', '..', '..', '..', 'data', 'db.json'),
+  ];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        return JSON.parse(fs.readFileSync(p, 'utf-8'));
+      }
+    } catch {}
+  }
+  // Fallback: try require
+  try {
+    return require('../../data/db.json');
+  } catch {}
+  return getDefaultDb();
+}
 
 interface Corretor {
   cpf: string;
@@ -46,19 +64,20 @@ function getDefaultDb(): DB {
 
 export function readDb(): DB {
   if (isProduction) {
-    // In Vercel: use /tmp, seed from imported bundled data
     if (!fs.existsSync(RUNTIME_DB)) {
-      fs.writeFileSync(RUNTIME_DB, JSON.stringify(bundledData));
+      const data = getBundledData();
+      fs.writeFileSync(RUNTIME_DB, JSON.stringify(data));
+      return data;
     }
     try {
       return JSON.parse(fs.readFileSync(RUNTIME_DB, 'utf-8'));
     } catch {
-      return bundledData as unknown as DB;
+      return getBundledData();
     }
   } else {
-    // Local dev: use data/db.json
+    const localPath = path.join(process.cwd(), 'data', 'db.json');
     try {
-      return JSON.parse(fs.readFileSync(LOCAL_DB, 'utf-8'));
+      return JSON.parse(fs.readFileSync(localPath, 'utf-8'));
     } catch {
       return getDefaultDb();
     }
@@ -66,7 +85,7 @@ export function readDb(): DB {
 }
 
 export function writeDb(db: DB): void {
-  const writePath = isProduction ? RUNTIME_DB : LOCAL_DB;
+  const writePath = isProduction ? RUNTIME_DB : path.join(process.cwd(), 'data', 'db.json');
   try {
     fs.writeFileSync(writePath, JSON.stringify(db));
   } catch (e) {
