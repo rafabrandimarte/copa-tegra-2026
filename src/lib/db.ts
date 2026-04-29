@@ -5,13 +5,22 @@ const RUNTIME_DB = '/tmp/db.json';
 const isProduction = process.env.VERCEL === '1';
 
 function getBundledData(): DB {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const data = require('./seed-data.json');
-    return data as DB;
-  } catch {
-    return getDefaultDb();
+  const candidates = [
+    path.join(process.cwd(), 'data', 'db.json'),
+    path.join(__dirname, '..', '..', 'data', 'db.json'),
+    path.join(__dirname, '..', '..', '..', 'data', 'db.json'),
+    path.join(__dirname, '..', '..', '..', '..', 'data', 'db.json'),
+    '/var/task/data/db.json',
+    '/var/task/.next/server/data/db.json',
+  ];
+  for (const p of candidates) {
+    try {
+      if (fs.existsSync(p)) {
+        return JSON.parse(fs.readFileSync(p, 'utf-8'));
+      }
+    } catch {}
   }
+  return getDefaultDb();
 }
 
 interface Corretor {
