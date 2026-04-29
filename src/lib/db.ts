@@ -2,7 +2,10 @@ import fs from 'fs';
 import path from 'path';
 
 const BUNDLED_DB = path.join(process.cwd(), 'data', 'db.json');
-const RUNTIME_DB = process.env.NODE_ENV === 'production' ? '/tmp/db.json' : path.join(process.cwd(), 'data', 'db.json');
+const RUNTIME_DB = '/tmp/db.json';
+
+// In dev mode, use local data dir
+const isProduction = process.env.NODE_ENV === 'production' || process.env.VERCEL === '1';
 
 interface Corretor {
   cpf: string;
@@ -41,28 +44,41 @@ function getDefaultDb(): DB {
 }
 
 export function readDb(): DB {
-  // In production: read from /tmp if exists, otherwise copy bundled data
-  if (process.env.NODE_ENV === 'production') {
-    if (!fs.existsSync(RUNTIME_DB)) {
-      // Copy bundled data to /tmp
+  const writePath = isProduction ? RUNTIME_DB : BUNDLED_DB;
+
+  // If runtime file doesn't exist in production, copy from bundled
+  if (isProduction && !fs.existsSync(RUNTIME_DB)) {
+    try {
       if (fs.existsSync(BUNDLED_DB)) {
         fs.copyFileSync(BUNDLED_DB, RUNTIME_DB);
       } else {
         fs.writeFileSync(RUNTIME_DB, JSON.stringify(getDefaultDb()));
       }
+    } catch (e) {
+      // If can't write to /tmp, just read from bundled
+      try {
+        return JSON.parse(fs.readFileSync(BUNDLED_DB, 'utf-8'));
+      } catch {
+        return getDefaultDb();
+      }
     }
   }
 
-  const dbPath = fs.existsSync(RUNTIME_DB) ? RUNTIME_DB : BUNDLED_DB;
+  const readPath = fs.existsSync(writePath) ? writePath : BUNDLED_DB;
   try {
-    return JSON.parse(fs.readFileSync(dbPath, 'utf-8'));
+    return JSON.parse(fs.readFileSync(readPath, 'utf-8'));
   } catch {
     return getDefaultDb();
   }
 }
 
 export function writeDb(db: DB): void {
-  fs.writeFileSync(RUNTIME_DB, JSON.stringify(db));
+  const writePath = isProduction ? RUNTIME_DB : BUNDLED_DB;
+  try {
+    fs.writeFileSync(writePath, JSON.stringify(db));
+  } catch (e) {
+    console.error('Failed to write DB:', e);
+  }
 }
 
 export function normalizeCpf(cpf: string | undefined | null): string {
