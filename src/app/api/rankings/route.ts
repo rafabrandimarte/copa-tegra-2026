@@ -77,23 +77,25 @@ export async function GET(req: NextRequest) {
       else if (e.tipo === 'retorno') pontos += 20;
     }
 
-    // Venda: 50pts * mult for regular, 250pts * mult for Golaço empreendimentos
-    const GOLACO_EMPREENDIMENTOS = [
-      'ALENZA CAMBUÍ', 'BUENO BRANDÃO 257', 'D\'ORU', 'DSG ITAIM',
-      'GRAVURA PERDIZES', 'TEG - SACOMÃ', 'TEG SACOMÃ', 'ZAHLE JARDINS',
-      'YPY ALTO DO IPIRANGA', 'LUCE CAMBUÍ', 'AMPÈRE BROOKLIN', 'AMPERE BROOKLIN',
-      'MOZAE HIGIENÓPOLIS', 'MOZAE HIGIENOPOLIS', 'CAPITOLO BY PIERO LISSONI',
-      'NOVA VIVERE CAMINHOS DA LAPA',
-    ];
+    // Venda scoring for managers based on empreendimento classification
+    const GOLACO = ['BUENO BRANDÃO', 'TIÈL', 'TIEL', 'YPY ALTO DO IPIRANGA', 'MOZAE HIGIENÓPOLIS', 'MOZAE HIGIENOPOLIS', 'CAPITOLO', 'ALENZA CAMBUÍ', 'ALENZA CAMBUI', 'LUCE CAMBUÍ', 'LUCE CAMBUI', 'SALAS COMERCIAIS', 'LOJAS'];
+    const PESO2X = ['ÁRIA HIGIENÓPOLIS', 'ARIA HIGIENOPOLIS', 'BEM MOEMA', 'ELO DUO', 'SOMA PERDIZES', 'UNIVERSO ÓRBITA', 'UNIVERSO ORBITA', 'YARD CAMBUÍ', 'YARD CAMBUI'];
+    // Peso 1x: Elo, TEG Mooca, Chateau Jardin, Universo Esfera, Garden Design, Nova Vivere, Vista Horizonte, Lazur
     for (const e of eventosEquipe) {
       if (e.tipo === 'venda') {
         const empUpper = (e.empreendimento || '').toUpperCase();
-        const isGolaco = GOLACO_EMPREENDIMENTOS.some(g => empUpper.includes(g.toUpperCase()));
-        pontos += (isGolaco ? 250 : 50) * (e.multiplicador || 1);
+        const isGolaco = GOLACO.some(g => empUpper.includes(g));
+        const isPeso2x = PESO2X.some(g => empUpper.includes(g));
+        const mult = e.multiplicador || 1; // split sale (0.5 or 1)
+        if (isGolaco) {
+          pontos += 250 * mult;
+        } else if (isPeso2x) {
+          pontos += 100 * mult; // 50 * 2x
+        } else {
+          pontos += 50 * mult; // 50 * 1x
+        }
       }
     }
-
-    // TODO: if Golaço list changes, update GOLACO_EMPREENDIMENTOS above
 
     return { gerente: eq.gerente, diretoria: eq.diretoria, pontos, total_corretores: cpfs.size };
   }).filter(s => s.pontos > 0).sort((a, b) => b.pontos - a.pontos);
