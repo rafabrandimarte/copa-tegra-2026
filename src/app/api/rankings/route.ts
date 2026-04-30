@@ -27,21 +27,66 @@ export async function GET(req: NextRequest) {
     };
   }).filter(a => a.pontos > 0).sort((a, b) => b.pontos - a.pontos);
 
-  // Selecoes: sum by equipe
-  const equipeMap = new Map<string, { gerente: string; diretoria: string; pontos: number; corretores: Set<string> }>();
+  // Selecoes: calculate manager points per rules
+  // Roleta: 10pts (seg-sab) or 20pts (dom) per DAY with >=5 corretores
+  // Indicação: 20pts each, Retorno: 20pts each
+  // Venda: 50pts * multiplicador, Golaço: 250pts * multiplicador
+  const equipeMap = new Map<string, { gerente: string; diretoria: string; corretores: Set<string> }>();
   for (const c of corretoresPraca) {
     if (!equipeMap.has(c.equipe)) {
-      equipeMap.set(c.equipe, { gerente: c.equipe, diretoria: c.diretoria, pontos: 0, corretores: new Set() });
+      equipeMap.set(c.equipe, { gerente: c.equipe, diretoria: c.diretoria, corretores: new Set() });
     }
-    const eq = equipeMap.get(c.equipe)!;
-    eq.corretores.add(c.cpf);
-    const pontos = db.eventos.filter(e => e.corretor_cpf === c.cpf).reduce((s, e) => s + e.pontos, 0);
-    eq.pontos += pontos;
+    equipeMap.get(c.equipe)!.corretores.add(c.cpf);
   }
-  const selecoes = Array.from(equipeMap.values())
-    .filter(s => s.pontos > 0)
-    .map(s => ({ gerente: s.gerente, diretoria: s.diretoria, pontos: s.pontos, total_corretores: s.corretores.size }))
-    .sort((a, b) => b.pontos - a.pontos);
+
+  const selecoes = Array.from(equipeMap.entries()).map(([equipe, eq]) => {
+    const cpfs = eq.corretores;
+    const eventosEquipe = db.eventos.filter(e => cpfs.has(e.corretor_cpf));
+    let pontos = 0;
+
+    // Roleta: group by date, count distinct corretores per day, award if >=5
+    const roletaPorDia = new Map<string, Set<string>>();
+    for (const e of eventosEquipe) {
+      if (e.tipo === 'roleta') {
+        const dia = e.data || 'unknown';
+        if (!roletaPorDia.has(dia)) roletaPorDia.set(dia, new Set());
+        roletaPorDia.get(dia)!.add(e.corretor_cpf);
+      }
+    }
+    for (const [dia, cpfsNoDia] of Array.from(roletaPorDia.entries())) {
+      if (cpfsNoDia.size >= 5) {
+        // Check if Sunday (try to parse date)
+        let isDomingo = false;
+        try {
+          const parts = dia.split(/[\/\-]/);
+          let dateObj: Date | null = null;
+          if (parts.length === 3) {
+            // Try DD/MM/YYYY or YYYY-MM-DD
+            if (parts[0].length === 4) dateObj = new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2]));
+            else dateObj = new Date(parseInt(parts[2]), parseInt(parts[1])-1, parseInt(parts[0]));
+          }
+          if (dateObj && dateObj.getDay() === 0) isDomingo = true;
+        } catch {}
+        pontos += isDomingo ? 20 : 10;
+      }
+    }
+
+    // Indicação e Retorno: 20pts each
+    for (const e of eventosEquipe) {
+      if (e.tipo === 'indicação' || e.tipo === 'indicacao') pontos += 20;
+      else if (e.tipo === 'retorno') pontos += 20;
+    }
+
+    // Venda: 50pts * multiplicador
+    for (const e of eventosEquipe) {
+      if (e.tipo === 'venda') pontos += 50 * (e.multiplicador || 1);
+    }
+
+    // Golaço: 250pts * multiplicador (vendas with golaco flag - for now same as venda with specific empreendimentos)
+    // TODO: define which empreendimentos are "Golaço"
+
+    return { gerente: eq.gerente, diretoria: eq.diretoria, pontos, total_corretores: cpfs.size };
+  }).filter(s => s.pontos > 0).sort((a, b) => b.pontos - a.pontos);
 
   const vgvAtual = praca === 'sp' ? db.vgv.sp : db.vgv.campinas;
 
