@@ -77,13 +77,23 @@ export async function GET(req: NextRequest) {
       else if (e.tipo === 'retorno') pontos += 20;
     }
 
-    // Venda: 50pts * multiplicador
+    // Venda: 50pts * mult for regular, 250pts * mult for Golaço empreendimentos
+    const GOLACO_EMPREENDIMENTOS = [
+      'ALENZA CAMBUÍ', 'BUENO BRANDÃO 257', 'D\'ORU', 'DSG ITAIM',
+      'GRAVURA PERDIZES', 'TEG - SACOMÃ', 'TEG SACOMÃ', 'ZAHLE JARDINS',
+      'YPY ALTO DO IPIRANGA', 'LUCE CAMBUÍ', 'AMPÈRE BROOKLIN', 'AMPERE BROOKLIN',
+      'MOZAE HIGIENÓPOLIS', 'MOZAE HIGIENOPOLIS', 'CAPITOLO BY PIERO LISSONI',
+      'NOVA VIVERE CAMINHOS DA LAPA',
+    ];
     for (const e of eventosEquipe) {
-      if (e.tipo === 'venda') pontos += 50 * (e.multiplicador || 1);
+      if (e.tipo === 'venda') {
+        const empUpper = (e.empreendimento || '').toUpperCase();
+        const isGolaco = GOLACO_EMPREENDIMENTOS.some(g => empUpper.includes(g.toUpperCase()));
+        pontos += (isGolaco ? 250 : 50) * (e.multiplicador || 1);
+      }
     }
 
-    // Golaço: 250pts * multiplicador (vendas with golaco flag - for now same as venda with specific empreendimentos)
-    // TODO: define which empreendimentos are "Golaço"
+    // TODO: if Golaço list changes, update GOLACO_EMPREENDIMENTOS above
 
     return { gerente: eq.gerente, diretoria: eq.diretoria, pontos, total_corretores: cpfs.size };
   }).filter(s => s.pontos > 0).sort((a, b) => b.pontos - a.pontos);
