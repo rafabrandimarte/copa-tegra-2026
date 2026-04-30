@@ -100,7 +100,16 @@ export async function GET(req: NextRequest) {
     return { gerente: eq.gerente, diretoria: eq.diretoria, pontos, total_corretores: cpfs.size };
   }).filter(s => s.pontos > 0).sort((a, b) => b.pontos - a.pontos);
 
-  const vgvAtual = praca === 'sp' ? db.vgv.sp : db.vgv.campinas;
+  // Calculate VGV from actual sales data
+  const cpfsPraca = new Set(corretoresPraca.map(c => c.cpf));
+  const vendasPraca = db.eventos.filter(e => e.tipo === 'venda' && cpfsPraca.has(e.corretor_cpf));
+  let vgvAtual = 0;
+  for (const v of vendasPraca) {
+    try {
+      const d = JSON.parse(v.detalhes || '{}');
+      vgvAtual += d.vgvBruto || 0;
+    } catch {}
+  }
 
   return NextResponse.json({
     artilheiros,
@@ -109,7 +118,7 @@ export async function GET(req: NextRequest) {
     vgvAtual,
     stats: {
       totalCorretores: corretoresPraca.length,
-      totalEventos: db.eventos.filter(e => corretoresPraca.some(c => c.cpf === e.corretor_cpf)).length,
+      totalEventos: db.eventos.filter(e => cpfsPraca.has(e.corretor_cpf)).length,
     },
   });
 }
